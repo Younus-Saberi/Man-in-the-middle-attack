@@ -161,3 +161,11 @@ while true; do
 done
 
 
+4.3 Results & Mitigation
+Result: The modified attack successfully poisoned the targets' ARP caches without triggering the hypothetical IDS. I verified this by capturing the traffic again using tcpdump and successfully retrieving the flag: CTF{secret-fSkqpILT51TM3B6OQZ9x}.
+
+Mitigation Strategies: To defend against both Standard and Request-based spoofing, network administrators should employ the following measures:
+
+Static ARP Entries: Manually map critical IP addresses to MAC addresses on end hosts. This prevents the operating system from accepting dynamic ARP updates entirely.
+
+Dynamic ARP Inspection (DAI): Implement security features on network switches that intercept all ARP packets and verify them against a trusted binding database (typically built via DHCP Snooping) before forwarding them.
